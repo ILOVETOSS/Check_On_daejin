@@ -1,20 +1,23 @@
 import tkinter as tk
+from tkinter import ttk, messagebox
 from pages.home_page import HomePage
 from pages.weather_page import WeatherPage
 from pages.checklist_page import ChecklistPage
 from utils.calculations import calculate_heat_index
 from utils.api import read_temperature, read_humidity
+import os
 
-BG_COLOR = "#F5F7FA"
+BG = "#F5F7FA"
 
 class SafetyMonitorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("안전 모니터링 시스템")
         self.geometry("800x600")
-        self.configure(bg=BG_COLOR)
+        self.configure(bg=BG)
 
-        # 센서 데이터
+        self.setup_styles()
+
         self.data = {
             "temperature": 28.0,
             "humidity": 65.0,
@@ -23,45 +26,43 @@ class SafetyMonitorApp(tk.Tk):
             "checklist_items": {}
         }
 
-        # 전체 grid 설정
-        self.rowconfigure(0, weight=1)  # 페이지 영역
-        self.rowconfigure(1, weight=0)  # 네비게이션 바
-        self.columnconfigure(0, weight=1)
+        container = tk.Frame(self, bg=BG)
+        container.pack(side="top", fill="both", expand=True)
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
 
-        # 페이지 컨테이너
-        self.container = tk.Frame(self, bg=BG_COLOR)
-        self.container.grid(row=0, column=0, sticky="nsew")
-        self.container.rowconfigure(0, weight=1)
-        self.container.columnconfigure(0, weight=1)
-
-        # 페이지 프레임 생성
         self.frames = {}
         for F in (HomePage, WeatherPage, ChecklistPage):
             page_name = F.__name__
-            frame = F(parent=self.container, controller=self)
+            frame = F(parent=container, controller=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
-        # 하단 네비게이션 바
-        nav_frame = tk.Frame(self, bg="#E5E7EB", height=60)
-        nav_frame.grid(row=1, column=0, sticky="ew")
-        nav_frame.columnconfigure((0,1,2), weight=1)
+        # Navigation Bar
+        nav_frame = tk.Frame(self, bg="#FFFFFF", height=30)
+        nav_frame.pack(side="bottom", fill="x")
 
-        # 홈을 중앙에 배치
-        buttons = [
-            ("환경", "WeatherPage"),
-            ("홈", "HomePage"),
-            ("체크리스트", "ChecklistPage")
-        ]
-
-        for i, (text, page) in enumerate(buttons):
-            btn = tk.Button(nav_frame, text=text, command=lambda p=page: self.show_frame(p))
-            btn.grid(row=0, column=i, sticky="nsew")
-            btn.configure(bg="#3B82F6", fg="white", font=("맑은 고딕", 12, "bold"), bd=0)
+        self.nav_icons = {}
+        for name, img_path in [("weather","assets/weather.png"),
+                               ("home","assets/home.png"),
+                               ("checklist","assets/checklist.png")]:
+            icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), img_path)).subsample(2,2)
+            btn = tk.Button(nav_frame, image=icon, bg="#FFFFFF", bd=0,
+                            command=lambda n=name: self.show_frame(f"{n.capitalize()}Page"))
+            btn.pack(side="left", expand=True, fill="x")
+            self.nav_icons[name] = icon  # 레퍼런스 유지
 
         self.show_frame("HomePage")
         self.update_sensor_data()
         self.check_heat_index()
+
+    def setup_styles(self):
+        style = ttk.Style()
+        style.theme_use('clam')
+        for name, color in [("Primary.TButton","#3B82F6"), ("Secondary.TButton","#10B981")]:
+            style.configure(name, background=color, foreground="white",
+                            font=("맑은 고딕", 12, "bold"), padding=(20,10), borderwidth=0)
+            style.map(name, background=[('active', color)])
 
     def show_frame(self, page_name):
         frame = self.frames[page_name]
@@ -75,14 +76,11 @@ class SafetyMonitorApp(tk.Tk):
         self.after(60000, self.update_sensor_data)
 
     def check_heat_index(self):
-        heat_index = calculate_heat_index(
-        self.data["temperature"], self.data["humidity"]
-        )
+        heat_index = calculate_heat_index(self.data["temperature"], self.data["humidity"])
         if heat_index >= 35:
             self.show_frame("ChecklistPage")
-            tk.messagebox.showwarning(
+            messagebox.showwarning(
                 "⚠️ 체감온도 위험",
-                f"체감온도가 {heat_index:.1f}°C로 위험합니다!\n체크리스트를 확인해주세요."
-                )
-        self.after(300000, self.check_heat_index) #123123
-
+                f"체감온도가 {heat_index}°C로 위험합니다!\n체크리스트를 확인해주세요."
+            )
+        self.after(300000, self.check_heat_index)
