@@ -84,5 +84,5 @@ class SafetyMonitorApp(tk.Tk):
                 "⚠️ 체감온도 위험",
                 f"체감온도가 {heat_index:.1f}°C로 위험합니다!\n체크리스트를 확인해주세요."
                 )
-        self.after(300000, self.check_heat_index)
+        self.after(300000, self.check_heat_index) #123123
 
