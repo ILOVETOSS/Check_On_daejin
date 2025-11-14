@@ -1,8 +1,8 @@
 import tkinter as tk
 from collections import deque
-import random
-import matplotlib.pyplot as plt
+from sensor_reader import read_temperature, read_humidity
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib import pyplot as plt
 from matplotlib import rcParams
 
 # 한글 깨짐 방지
@@ -23,13 +23,11 @@ class WeatherPage(tk.Frame):
             {"title": "UV 지수", "value": "--"}
         ]
 
-        # ===== 카드 프레임 (중앙 집중) =====
+        # ===== 카드 프레임 =====
         self.card_frame = tk.Frame(self, bg="#f5f5f5")
         self.card_frame.place(relx=0.5, rely=0.35, anchor="center")
 
         self.cards = []
-
-        # ===== 카드 2줄 배치 =====
         top_frame = tk.Frame(self.card_frame, bg="#f5f5f5")
         top_frame.pack(pady=15)
         bottom_frame = tk.Frame(self.card_frame, bg="#f5f5f5")
@@ -52,6 +50,7 @@ class WeatherPage(tk.Frame):
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().place(relx=0.5, rely=0.85, anchor="center", relwidth=0.95, relheight=0.2)
 
+        # ===== 센서 기반 데이터 갱신 시작 =====
         self.update_data()
 
     # ===== 카드 생성 =====
@@ -68,25 +67,38 @@ class WeatherPage(tk.Frame):
         card.value_label = value
         return card
 
-    # ===== 데이터 갱신 =====
+    # ===== 데이터 갱신 (온습도 + PM10 + UV) =====
     def update_data(self):
-        temp = round(random.uniform(29, 36), 1)
-        humidity = random.randint(50, 90)
-        feel = round(temp + random.uniform(-1, 1), 1)
-        pm10 = random.randint(10, 80)
-        uv = random.randint(0, 11)
+        # ---- Arduino 센서 데이터 읽기 ----
+        temp = read_temperature()
+        humidity = read_humidity()
 
-        self.cards[0].value_label.config(text=f"{temp} °C")
-        self.cards[1].value_label.config(text=f"{humidity} %")
-        self.cards[2].value_label.config(text=f"{feel} °C")
+        # 센서 값이 None이면 기존값 유지
+        if temp is None:
+            temp = self.temp_data[-1] if self.temp_data else 0.0
+        if humidity is None:
+            humidity = self.humidity_data[-1] if self.humidity_data else 0.0
+
+        # ---- 체감온도 계산 ----
+        feel = round(temp + 0.33 * humidity - 4, 1)
+
+        # ---- PM10, UV 지수 가져오기 (앱 데이터 연동) ----
+        pm10 = self.controller.data.get("pm10", "--")
+        uv = self.controller.data.get("uv_index", "--")
+
+        # ---- 카드 업데이트 ----
+        self.cards[0].value_label.config(text=f"{temp:.1f} °C")
+        self.cards[1].value_label.config(text=f"{humidity:.1f} %")
+        self.cards[2].value_label.config(text=f"{feel:.1f} °C")
         self.cards[3].value_label.config(text=f"{pm10} µg/m³")
         self.cards[4].value_label.config(text=f"{uv}")
 
-        # 그래프 데이터 추가
+        # ---- 그래프 데이터 추가 ----
         self.temp_data.append(temp)
         self.humidity_data.append(humidity)
         self.feel_data.append(feel)
 
+        # ---- 그래프 갱신 ----
         self.ax.clear()
         self.ax.plot(list(self.temp_data), label="온도", color="orange")
         self.ax.plot(list(self.feel_data), label="체감온도", color="red")
@@ -99,13 +111,5 @@ class WeatherPage(tk.Frame):
         self.ax.grid(True, linestyle='--', alpha=0.5)
         self.canvas.draw()
 
+        # ---- 5초마다 갱신 ----
         self.after(5000, self.update_data)
-
-# ===== 테스트용 실행 =====
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.geometry("1300x800")
-    root.title("환경 데이터 모니터링")
-    page = WeatherPage(root)
-    page.pack(fill="both", expand=True)
-    root.mainloop()
